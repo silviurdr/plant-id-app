@@ -1,2 +1,13 @@
+name: Do Nothing
 
-name: Deploy to GitHub Pages
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  do-nothing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Just print a message
+        run: echo "This workflow runs but does nothing else."
