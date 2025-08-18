@@ -21,7 +21,7 @@ jobs:
       - name: Debug replaced index.html
         run: |
           echo "----- INDEX.HTML CONTENT PREVIEW -----"
-          head -n 20 index.html
+          head -n 50 index.html
           echo "--------------------------------------"
 
       - name: Deploy
