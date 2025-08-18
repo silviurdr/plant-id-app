@@ -8,83 +8,19 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v2
 
-      - name: Check secrets exist
-        run: |
-          echo "Checking secrets..."
-          [ -n "$PLANTNET_API_KEY" ] && echo "PLANTNET_API_KEY: OK" || echo "PLANTNET_API_KEY: MISSING/EMPTY"
-          [ -n "$GEMINI_API_KEY" ] && echo "GEMINI_API_KEY: OK" || echo "GEMINI_API_KEY: MISSING/EMPTY"
+      - name: Inject API Keys
         env:
           PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        
-      - name: Test secrets and simple replacement
         run: |
-          echo "=== DETAILED SECRET CHECK ==="
-          echo "PLANTNET_API_KEY length: ${#PLANTNET_API_KEY}"
-          echo "GEMINI_API_KEY length: ${#GEMINI_API_KEY}"
-          
-          if [ -z "$PLANTNET_API_KEY" ]; then
-            echo "❌ PLANTNET_API_KEY is EMPTY!"
-          else
-            echo "✅ PLANTNET_API_KEY has content: ${PLANTNET_API_KEY:0:10}..."
-          fi
-          
-          if [ -z "$GEMINI_API_KEY" ]; then
-            echo "❌ GEMINI_API_KEY is EMPTY!"
-          else
-            echo "✅ GEMINI_API_KEY has content: ${GEMINI_API_KEY:0:10}..."
-          fi
-          
-          echo ""
-          echo "=== SHOWING EXACT HTML CONTENT ==="
-          echo "Lines with PLANTNET_KEY_HERE:"
-          grep -n "PLANTNET_KEY_HERE" index.html || echo "PLANTNET_KEY_HERE not found!"
-          echo "Lines with GEMINI_KEY_HERE:"
-          grep -n "GEMINI_KEY_HERE" index.html || echo "GEMINI_KEY_HERE not found!"
-          
-          echo ""
-          echo "=== MANUAL REPLACEMENT TEST ==="
-          # Test if the keys work at all
-          echo "Testing replacement manually:"
-          echo "PLANTNET_KEY_HERE" | sed "s/PLANTNET_KEY_HERE/$PLANTNET_API_KEY/"
-          echo "GEMINI_KEY_HERE" | sed "s/GEMINI_KEY_HERE/$GEMINI_API_KEY/"
-          
-          echo ""
-          echo "=== ATTEMPTING REPLACEMENT ==="
-          # Show before
-          echo "BEFORE:"
-          head -40 index.html | tail -10
-          
-          # Do replacement with verbose output
-          echo "Running sed commands..."
-          sed -i "s/PLANTNET_KEY_HERE/$PLANTNET_API_KEY/g" index.html
-          echo "PlantNet sed completed"
-          sed -i "s/GEMINI_KEY_HERE/$GEMINI_API_KEY/g" index.html  
-          echo "Gemini sed completed"
-          
-          # Show after
-          echo "AFTER:"
-          head -40 index.html | tail -10
-          
-          echo ""
-          echo "=== FINAL CHECK ==="
-          if grep -q "PLANTNET_KEY_HERE\|GEMINI_KEY_HERE" index.html; then
-            echo "❌ Placeholders still present!"
-            grep "PLANTNET_KEY_HERE\|GEMINI_KEY_HERE" index.html
-          else
-            echo "✅ All placeholders replaced!"
-          fi
-          
-        env:
-          PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-      
-      - name: Deploy to GitHub Pages
+          sed -i 's|PLANTNET_KEY_HERE|${{ secrets.PLANTNET_API_KEY }}|g' index.html
+          sed -i 's|GEMINI_KEY_HERE|${{ secrets.GEMINI_API_KEY }}|g' index.html
+
+      - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
