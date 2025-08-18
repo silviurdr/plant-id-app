@@ -13,7 +13,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4  # Updated to latest version
         
-      - name: Inject API Keys (Python method - handles special chars)
+      - name: Debug - Show current placeholders
+        run: |
+          echo "----- CURRENT PLACEHOLDERS IN HTML -----"
+          grep -n "API_KEY" index.html | head -10
+          echo "--------------------------------------"
+          
+      - name: Inject API Keys (Python method with debugging)
         run: |
           python3 -c "
           import os
@@ -27,21 +33,44 @@ jobs:
           plantnet_key = os.environ.get('PLANTNET_API_KEY', '')
           gemini_key = os.environ.get('GEMINI_API_KEY', '')
           
-          # Replace placeholders INCLUDING the quotes
+          print(f'PlantNet key length: {len(plantnet_key)}')
+          print(f'Gemini key length: {len(gemini_key)}')
+          
+          # Show what we're looking for
+          if '__PLANTNET_API_KEY__' in content:
+              print('✅ Found __PLANTNET_API_KEY__ placeholder')
+          else:
+              print('❌ __PLANTNET_API_KEY__ placeholder NOT found')
+              
+          if '__GEMINI_API_KEY__' in content:
+              print('✅ Found __GEMINI_API_KEY__ placeholder')  
+          else:
+              print('❌ __GEMINI_API_KEY__ placeholder NOT found')
+          
+          # Try multiple replacement patterns
+          original_content = content
+          
+          # Pattern 1: With double quotes
           content = content.replace('\"__PLANTNET_API_KEY__\"', '\"' + plantnet_key + '\"')
           content = content.replace('\"__GEMINI_API_KEY__\"', '\"' + gemini_key + '\"')
           
-          # Also handle single quotes just in case
+          # Pattern 2: With single quotes  
           content = content.replace(\"'__PLANTNET_API_KEY__'\", \"'\" + plantnet_key + \"'\")
           content = content.replace(\"'__GEMINI_API_KEY__'\", \"'\" + gemini_key + \"'\")
+          
+          # Pattern 3: Without quotes
+          content = content.replace('__PLANTNET_API_KEY__', plantnet_key)
+          content = content.replace('__GEMINI_API_KEY__', gemini_key)
+          
+          # Check if any replacement happened
+          if content != original_content:
+              print('✅ Replacement successful!')
+          else:
+              print('❌ No replacement occurred - check placeholder format')
           
           # Write back to file
           with open('index.html', 'w', encoding='utf-8') as f:
               f.write(content)
-          
-          print('✅ API keys injected successfully')
-          print(f'PlantNet key length: {len(plantnet_key)}')
-          print(f'Gemini key length: {len(gemini_key)}')
           "
         env:
           PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
