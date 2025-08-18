@@ -13,65 +13,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4  # Updated to latest version
         
-      - name: Debug - Show current placeholders
+      - name: Show exact file content and test secrets
         run: |
-          echo "----- CURRENT PLACEHOLDERS IN HTML -----"
-          grep -n "API_KEY" index.html | head -10
-          echo "--------------------------------------"
+          echo "----- TESTING SECRETS -----"
+          echo "PlantNet key length: ${#PLANTNET_API_KEY}"
+          echo "Gemini key length: ${#GEMINI_API_KEY}"
+          echo "First 4 chars of PlantNet: ${PLANTNET_API_KEY:0:4}"
+          echo "First 4 chars of Gemini: ${GEMINI_API_KEY:0:4}"
+          echo ""
+          echo "----- EXACT HTML CONTENT AROUND API KEYS -----"
+          grep -A 2 -B 2 "API_KEY" index.html
+          echo ""
+          echo "----- SHOWING HEX DUMP OF PROBLEMATIC LINES -----"
+          grep "API_KEY" index.html | head -5 | hexdump -C
+        env:
+          PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           
-      - name: Inject API Keys (Python method with debugging)
+      - name: Force replacement using sed (nuclear option)
         run: |
-          python3 -c "
-          import os
-          import re
+          echo "Before replacement:"
+          grep "PLANTNET_API_KEY" index.html | head -3
           
-          # Read the HTML file
-          with open('index.html', 'r', encoding='utf-8') as f:
-              content = f.read()
+          # Use different delimiters and escape everything
+          sed -i "s#__PLANTNET_API_KEY__#${PLANTNET_API_KEY}#g" index.html
+          sed -i "s#__GEMINI_API_KEY__#${GEMINI_API_KEY}#g" index.html
           
-          # Get API keys from environment
-          plantnet_key = os.environ.get('PLANTNET_API_KEY', '')
-          gemini_key = os.environ.get('GEMINI_API_KEY', '')
-          
-          print(f'PlantNet key length: {len(plantnet_key)}')
-          print(f'Gemini key length: {len(gemini_key)}')
-          
-          # Show what we're looking for
-          if '__PLANTNET_API_KEY__' in content:
-              print('✅ Found __PLANTNET_API_KEY__ placeholder')
-          else:
-              print('❌ __PLANTNET_API_KEY__ placeholder NOT found')
-              
-          if '__GEMINI_API_KEY__' in content:
-              print('✅ Found __GEMINI_API_KEY__ placeholder')  
-          else:
-              print('❌ __GEMINI_API_KEY__ placeholder NOT found')
-          
-          # Try multiple replacement patterns
-          original_content = content
-          
-          # Pattern 1: With double quotes
-          content = content.replace('\"__PLANTNET_API_KEY__\"', '\"' + plantnet_key + '\"')
-          content = content.replace('\"__GEMINI_API_KEY__\"', '\"' + gemini_key + '\"')
-          
-          # Pattern 2: With single quotes  
-          content = content.replace(\"'__PLANTNET_API_KEY__'\", \"'\" + plantnet_key + \"'\")
-          content = content.replace(\"'__GEMINI_API_KEY__'\", \"'\" + gemini_key + \"'\")
-          
-          # Pattern 3: Without quotes
-          content = content.replace('__PLANTNET_API_KEY__', plantnet_key)
-          content = content.replace('__GEMINI_API_KEY__', gemini_key)
-          
-          # Check if any replacement happened
-          if content != original_content:
-              print('✅ Replacement successful!')
-          else:
-              print('❌ No replacement occurred - check placeholder format')
-          
-          # Write back to file
-          with open('index.html', 'w', encoding='utf-8') as f:
-              f.write(content)
-          "
+          echo "After replacement:"
+          grep "PLANTNET_API_KEY\|${PLANTNET_API_KEY:0:10}" index.html | head -3
         env:
           PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
