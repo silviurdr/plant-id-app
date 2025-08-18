@@ -11,55 +11,148 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4  # Updated to latest version
+        uses: actions/checkout@v4
         
-      - name: Show exact file content and test secrets
+      - name: Complete Debug - Show everything
         run: |
-          echo "----- TESTING SECRETS -----"
-          echo "PlantNet key length: ${#PLANTNET_API_KEY}"
-          echo "Gemini key length: ${#GEMINI_API_KEY}"
-          echo "First 4 chars of PlantNet: ${PLANTNET_API_KEY:0:4}"
-          echo "First 4 chars of Gemini: ${GEMINI_API_KEY:0:4}"
+          echo "=== CHECKING SECRETS ==="
+          if [ -n "$PLANTNET_API_KEY" ]; then
+            echo "✅ PLANTNET_API_KEY exists (length: ${#PLANTNET_API_KEY})"
+            echo "First 8 chars: ${PLANTNET_API_KEY:0:8}..."
+          else
+            echo "❌ PLANTNET_API_KEY is empty or missing!"
+          fi
+          
+          if [ -n "$GEMINI_API_KEY" ]; then
+            echo "✅ GEMINI_API_KEY exists (length: ${#GEMINI_API_KEY})"
+            echo "First 8 chars: ${GEMINI_API_KEY:0:8}..."
+          else
+            echo "❌ GEMINI_API_KEY is empty or missing!"
+          fi
+          
           echo ""
-          echo "----- EXACT HTML CONTENT AROUND API KEYS -----"
-          grep -A 2 -B 2 "API_KEY" index.html
+          echo "=== ORIGINAL HTML CONTENT ==="
+          echo "Lines containing API_KEY:"
+          grep -n "API_KEY" index.html
           echo ""
-          echo "----- SHOWING HEX DUMP OF PROBLEMATIC LINES -----"
-          grep "API_KEY" index.html | head -5 | hexdump -C
-        env:
-          PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           
-      - name: Force replacement using sed (nuclear option)
-        run: |
-          echo "Before replacement:"
-          grep "PLANTNET_API_KEY" index.html | head -3
-          
-          # Use different delimiters and escape everything
-          sed -i "s#__PLANTNET_API_KEY__#${PLANTNET_API_KEY}#g" index.html
-          sed -i "s#__GEMINI_API_KEY__#${GEMINI_API_KEY}#g" index.html
-          
-          echo "After replacement:"
-          grep "PLANTNET_API_KEY\|${PLANTNET_API_KEY:0:10}" index.html | head -3
+          echo "=== EXACT CONTENT OF THOSE LINES ==="
+          grep "API_KEY" index.html | cat -A
+          echo ""
         env:
           PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       
-      - name: Debug API Key Injection
+      - name: Nuclear Option - Multiple replacement methods
         run: |
-          echo "----- CHECKING API KEY INJECTION -----"
-          echo "Looking for PlantNet key pattern:"
-          grep -n "PLANTNET_API_KEY.*=" index.html | head -3
-          echo "Looking for Gemini key pattern:"
-          grep -n "GEMINI_API_KEY.*=" index.html | head -3
-          echo "Checking for any remaining placeholders:"
-          if grep -q "__.*_API_KEY__" index.html; then
-            echo "❌ WARNING: Found unreplaced placeholders!"
-            grep -n "__.*_API_KEY__" index.html
+          echo "=== ATTEMPTING REPLACEMENTS ==="
+          
+          # Create backup
+          cp index.html index.html.backup
+          
+          # Method 1: Basic sed
+          echo "Method 1: Basic sed"
+          sed -i "s/__PLANTNET_API_KEY__/${PLANTNET_API_KEY}/g" index.html
+          sed -i "s/__GEMINI_API_KEY__/${GEMINI_API_KEY}/g" index.html
+          
+          # Check if it worked
+          if grep -q "__PLANTNET_API_KEY__" index.html; then
+            echo "❌ Method 1 failed - restoring backup"
+            cp index.html.backup index.html
           else
-            echo "✅ No placeholders found - injection appears successful"
+            echo "✅ Method 1 succeeded!"
+            grep "PLANTNET_API_KEY" index.html | head -1
+            exit 0
           fi
-          echo "--------------------------------------"
+          
+          # Method 2: Perl replacement
+          echo "Method 2: Perl"
+          perl -pi -e "s/__PLANTNET_API_KEY__/$ENV{PLANTNET_API_KEY}/g" index.html
+          perl -pi -e "s/__GEMINI_API_KEY__/$ENV{GEMINI_API_KEY}/g" index.html
+          
+          if grep -q "__PLANTNET_API_KEY__" index.html; then
+            echo "❌ Method 2 failed - restoring backup"
+            cp index.html.backup index.html
+          else
+            echo "✅ Method 2 succeeded!"
+            grep "PLANTNET_API_KEY" index.html | head -1
+            exit 0
+          fi
+          
+          # Method 3: awk
+          echo "Method 3: awk"
+          awk -v pkey="$PLANTNET_API_KEY" -v gkey="$GEMINI_API_KEY" '
+          {
+            gsub(/__PLANTNET_API_KEY__/, pkey)
+            gsub(/__GEMINI_API_KEY__/, gkey)
+            print
+          }' index.html.backup > index.html
+          
+          if grep -q "__PLANTNET_API_KEY__" index.html; then
+            echo "❌ Method 3 failed - restoring backup"
+            cp index.html.backup index.html
+          else
+            echo "✅ Method 3 succeeded!"
+            grep "PLANTNET_API_KEY" index.html | head -1
+            exit 0
+          fi
+          
+          # Method 4: Python with exact string matching
+          echo "Method 4: Python exact match"
+          python3 -c "
+          import os
+          
+          with open('index.html.backup', 'r') as f:
+              content = f.read()
+          
+          plantnet = os.environ['PLANTNET_API_KEY']
+          gemini = os.environ['GEMINI_API_KEY']
+          
+          # Try every possible variation
+          variations = [
+              ('__PLANTNET_API_KEY__', plantnet),
+              ('\"__PLANTNET_API_KEY__\"', '\"' + plantnet + '\"'),
+              (\"'__PLANTNET_API_KEY__'\", \"'\" + plantnet + \"'\"),
+              ('__GEMINI_API_KEY__', gemini),
+              ('\"__GEMINI_API_KEY__\"', '\"' + gemini + '\"'),
+              (\"'__GEMINI_API_KEY__'\", \"'\" + gemini + \"'\"),
+          ]
+          
+          for old, new in variations:
+              if old in content:
+                  print(f'Found and replacing: {old}')
+                  content = content.replace(old, new)
+          
+          with open('index.html', 'w') as f:
+              f.write(content)
+          "
+          
+          echo "Final check:"
+          if grep -q "__.*_API_KEY__" index.html; then
+            echo "❌ All methods failed! Showing what we have:"
+            grep "API_KEY" index.html | head -5
+          else
+            echo "✅ Python method succeeded!"
+            grep "API_KEY" index.html | head -2
+          fi
+        env:
+          PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      
+      - name: Final verification
+        run: |
+          echo "=== FINAL HTML CONTENT ==="
+          echo "Lines containing API keys:"
+          grep "API_KEY\|PLANTNET\|GEMINI" index.html | head -5
+          
+          echo ""
+          echo "Checking for unreplaced placeholders:"
+          if grep -q "__.*_API_KEY__" index.html; then
+            echo "❌ WARNING: Still have unreplaced placeholders!"
+            grep "__.*_API_KEY__" index.html
+          else
+            echo "✅ No placeholders found - ready to deploy!"
+          fi
       
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
