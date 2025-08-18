@@ -13,7 +13,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: Complete Debug - Show everything
+      - name: Extract exact placeholders from HTML
         run: |
           echo "=== CHECKING SECRETS ==="
           if [ -n "$PLANTNET_API_KEY" ]; then
@@ -31,113 +31,104 @@ jobs:
           fi
           
           echo ""
-          echo "=== ORIGINAL HTML CONTENT ==="
-          echo "Lines containing API_KEY:"
-          grep -n "API_KEY" index.html
-          echo ""
+          echo "=== EXTRACTING EXACT PLACEHOLDERS ==="
           
-          echo "=== EXACT CONTENT OF THOSE LINES ==="
-          grep "API_KEY" index.html | cat -A
-          echo ""
+          # Extract the exact placeholder text between quotes
+          PLANTNET_PLACEHOLDER=$(grep -o '"[^"]*PLANTNET[^"]*"' index.html | head -1)
+          GEMINI_PLACEHOLDER=$(grep -o '"[^"]*GEMINI[^"]*"' index.html | head -1)
+          
+          echo "Found PlantNet placeholder: $PLANTNET_PLACEHOLDER"
+          echo "Found Gemini placeholder: $GEMINI_PLACEHOLDER"
+          
+          # Show hex values to see exact characters
+          echo "PlantNet placeholder hex:"
+          echo "$PLANTNET_PLACEHOLDER" | xxd
+          echo "Gemini placeholder hex:"
+          echo "$GEMINI_PLACEHOLDER" | xxd
+          
+          # Save these for the next step
+          echo "$PLANTNET_PLACEHOLDER" > /tmp/plantnet_placeholder.txt
+          echo "$GEMINI_PLACEHOLDER" > /tmp/gemini_placeholder.txt
         env:
           PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       
-      - name: Nuclear Option - Multiple replacement methods
+      - name: Replace using exact extracted placeholders
         run: |
-          echo "=== ATTEMPTING REPLACEMENTS ==="
+          echo "=== USING EXTRACTED PLACEHOLDERS FOR REPLACEMENT ==="
+          
+          # Read the exact placeholders we found
+          if [ -f /tmp/plantnet_placeholder.txt ]; then
+            PLANTNET_EXACT=$(cat /tmp/plantnet_placeholder.txt)
+            echo "Using exact PlantNet placeholder: $PLANTNET_EXACT"
+          else
+            PLANTNET_EXACT='"__PLANTNET_API_KEY__"'
+            echo "Using fallback PlantNet placeholder: $PLANTNET_EXACT"
+          fi
+          
+          if [ -f /tmp/gemini_placeholder.txt ]; then
+            GEMINI_EXACT=$(cat /tmp/gemini_placeholder.txt)
+            echo "Using exact Gemini placeholder: $GEMINI_EXACT"
+          else
+            GEMINI_EXACT='"__GEMINI_API_KEY__"'
+            echo "Using fallback Gemini placeholder: $GEMINI_EXACT"
+          fi
           
           # Create backup
           cp index.html index.html.backup
           
-          # Method 1: Basic sed
-          echo "Method 1: Basic sed"
-          sed -i "s/__PLANTNET_API_KEY__/${PLANTNET_API_KEY}/g" index.html
-          sed -i "s/__GEMINI_API_KEY__/${GEMINI_API_KEY}/g" index.html
-          
-          # Check if it worked
-          if grep -q "__PLANTNET_API_KEY__" index.html; then
-            echo "❌ Method 1 failed - restoring backup"
-            cp index.html.backup index.html
-          else
-            echo "✅ Method 1 succeeded!"
-            grep "PLANTNET_API_KEY" index.html | head -1
-            exit 0
-          fi
-          
-          # Method 2: Perl replacement
-          echo "Method 2: Perl"
-          perl -pi -e "s/__PLANTNET_API_KEY__/$ENV{PLANTNET_API_KEY}/g" index.html
-          perl -pi -e "s/__GEMINI_API_KEY__/$ENV{GEMINI_API_KEY}/g" index.html
-          
-          if grep -q "__PLANTNET_API_KEY__" index.html; then
-            echo "❌ Method 2 failed - restoring backup"
-            cp index.html.backup index.html
-          else
-            echo "✅ Method 2 succeeded!"
-            grep "PLANTNET_API_KEY" index.html | head -1
-            exit 0
-          fi
-          
-          # Method 3: awk
-          echo "Method 3: awk"
-          awk -v pkey="$PLANTNET_API_KEY" -v gkey="$GEMINI_API_KEY" '
-          {
-            gsub(/__PLANTNET_API_KEY__/, pkey)
-            gsub(/__GEMINI_API_KEY__/, gkey)
-            print
-          }' index.html.backup > index.html
-          
-          if grep -q "__PLANTNET_API_KEY__" index.html; then
-            echo "❌ Method 3 failed - restoring backup"
-            cp index.html.backup index.html
-          else
-            echo "✅ Method 3 succeeded!"
-            grep "PLANTNET_API_KEY" index.html | head -1
-            exit 0
-          fi
-          
-          # Method 4: Python with exact string matching
-          echo "Method 4: Python exact match"
+          # Use Python to replace with the exact strings we found
           python3 -c "
           import os
           
-          with open('index.html.backup', 'r') as f:
+          with open('index.html', 'r') as f:
               content = f.read()
           
-          plantnet = os.environ['PLANTNET_API_KEY']
-          gemini = os.environ['GEMINI_API_KEY']
+          plantnet_key = os.environ['PLANTNET_API_KEY']
+          gemini_key = os.environ['GEMINI_API_KEY']
+          plantnet_placeholder = os.environ['PLANTNET_EXACT'].strip()
+          gemini_placeholder = os.environ['GEMINI_EXACT'].strip()
           
-          # Try every possible variation
-          variations = [
-              ('__PLANTNET_API_KEY__', plantnet),
-              ('\"__PLANTNET_API_KEY__\"', '\"' + plantnet + '\"'),
-              (\"'__PLANTNET_API_KEY__'\", \"'\" + plantnet + \"'\"),
-              ('__GEMINI_API_KEY__', gemini),
-              ('\"__GEMINI_API_KEY__\"', '\"' + gemini + '\"'),
-              (\"'__GEMINI_API_KEY__'\", \"'\" + gemini + \"'\"),
-          ]
+          print(f'Replacing: {plantnet_placeholder} -> \"[API_KEY]\"')
+          print(f'Replacing: {gemini_placeholder} -> \"[API_KEY]\"')
           
-          for old, new in variations:
-              if old in content:
-                  print(f'Found and replacing: {old}')
-                  content = content.replace(old, new)
+          # Replace with exact matches
+          if plantnet_placeholder in content:
+              content = content.replace(plantnet_placeholder, '\"' + plantnet_key + '\"')
+              print('✅ PlantNet replacement done')
+          else:
+              print('❌ PlantNet placeholder not found in content')
+          
+          if gemini_placeholder in content:
+              content = content.replace(gemini_placeholder, '\"' + gemini_key + '\"')  
+              print('✅ Gemini replacement done')
+          else:
+              print('❌ Gemini placeholder not found in content')
           
           with open('index.html', 'w') as f:
               f.write(content)
           "
           
-          echo "Final check:"
+          echo ""
+          echo "=== CHECKING RESULT ==="
           if grep -q "__.*_API_KEY__" index.html; then
-            echo "❌ All methods failed! Showing what we have:"
-            grep "API_KEY" index.html | head -5
+            echo "❌ Still have unreplaced placeholders:"
+            grep "__.*_API_KEY__" index.html
+            echo "Trying manual sed replacement..."
+            
+            # Last resort - try to replace anything that looks like a placeholder
+            sed -i 's/"__PLANTNET_API_KEY__"/"'"$PLANTNET_API_KEY"'"/g' index.html
+            sed -i 's/"__GEMINI_API_KEY__"/"'"$GEMINI_API_KEY"'"/g' index.html
+            
           else
-            echo "✅ Python method succeeded!"
-            grep "API_KEY" index.html | head -2
+            echo "✅ Replacement successful!"
+            grep "const.*API_KEY" index.html | head -2
           fi
         env:
           PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          PLANTNET_EXACT: $(cat /tmp/plantnet_placeholder.txt 2>/dev/null || echo '"__PLANTNET_API_KEY__"')
+          GEMINI_EXACT: $(cat /tmp/gemini_placeholder.txt 2>/dev/null || echo '"__GEMINI_API_KEY__"')
       
       - name: Final verification
         run: |
