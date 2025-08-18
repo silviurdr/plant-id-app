@@ -27,9 +27,13 @@ jobs:
           plantnet_key = os.environ.get('PLANTNET_API_KEY', '')
           gemini_key = os.environ.get('GEMINI_API_KEY', '')
           
-          # Replace placeholders
-          content = content.replace('__PLANTNET_API_KEY__', plantnet_key)
-          content = content.replace('__GEMINI_API_KEY__', gemini_key)
+          # Replace placeholders INCLUDING the quotes
+          content = content.replace('\"__PLANTNET_API_KEY__\"', '\"' + plantnet_key + '\"')
+          content = content.replace('\"__GEMINI_API_KEY__\"', '\"' + gemini_key + '\"')
+          
+          # Also handle single quotes just in case
+          content = content.replace(\"'__PLANTNET_API_KEY__'\", \"'\" + plantnet_key + \"'\")
+          content = content.replace(\"'__GEMINI_API_KEY__'\", \"'\" + gemini_key + \"'\")
           
           # Write back to file
           with open('index.html', 'w', encoding='utf-8') as f:
