@@ -1,1 +1,66 @@
+name: Deploy to GitHub Pages
 
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4  # Updated to latest version
+        
+      - name: Inject API Keys (Python method - handles special chars)
+        run: |
+          python3 -c "
+          import os
+          import re
+          
+          # Read the HTML file
+          with open('index.html', 'r', encoding='utf-8') as f:
+              content = f.read()
+          
+          # Get API keys from environment
+          plantnet_key = os.environ.get('PLANTNET_API_KEY', '')
+          gemini_key = os.environ.get('GEMINI_API_KEY', '')
+          
+          # Replace placeholders
+          content = content.replace('__PLANTNET_API_KEY__', plantnet_key)
+          content = content.replace('__GEMINI_API_KEY__', gemini_key)
+          
+          # Write back to file
+          with open('index.html', 'w', encoding='utf-8') as f:
+              f.write(content)
+          
+          print('✅ API keys injected successfully')
+          print(f'PlantNet key length: {len(plantnet_key)}')
+          print(f'Gemini key length: {len(gemini_key)}')
+          "
+        env:
+          PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      
+      - name: Debug API Key Injection
+        run: |
+          echo "----- CHECKING API KEY INJECTION -----"
+          echo "Looking for PlantNet key pattern:"
+          grep -n "PLANTNET_API_KEY.*=" index.html | head -3
+          echo "Looking for Gemini key pattern:"
+          grep -n "GEMINI_API_KEY.*=" index.html | head -3
+          echo "Checking for any remaining placeholders:"
+          if grep -q "__.*_API_KEY__" index.html; then
+            echo "❌ WARNING: Found unreplaced placeholders!"
+            grep -n "__.*_API_KEY__" index.html
+          else
+            echo "✅ No placeholders found - injection appears successful"
+          fi
+          echo "--------------------------------------"
+      
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./
