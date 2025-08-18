@@ -14,8 +14,15 @@ jobs:
 
       - name: Inject API Keys
         run: |
-          sed -i 's|__PLANTNET_API_KEY__|${{ secrets.PLANTNET_API_KEY }}|g' index.html
-          sed -i 's|__GEMINI_API_KEY__|${{ secrets.GEMINI_API_KEY }}|g' index.html
+          sed -i "s|__PLANTNET_API_KEY__|${{ secrets.PLANTNET_API_KEY }}|g" index.html
+          sed -i "s|__GEMINI_API_KEY__|${{ secrets.GEMINI_API_KEY }}|g" index.html
+
+
+      - name: Debug replaced index.html
+        run: |
+          echo "----- INDEX.HTML CONTENT PREVIEW -----"
+          head -n 20 index.html
+          echo "--------------------------------------"
 
       - name: Deploy
         uses: peaceiris/actions-gh-pages@v3
