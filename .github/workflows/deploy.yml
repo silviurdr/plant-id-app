@@ -12,42 +12,72 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Check secrets exist
+        run: |
+          echo "Checking secrets..."
+          [ -n "$PLANTNET_API_KEY" ] && echo "PLANTNET_API_KEY: OK" || echo "PLANTNET_API_KEY: MISSING/EMPTY"
+          [ -n "$GEMINI_API_KEY" ] && echo "GEMINI_API_KEY: OK" || echo "GEMINI_API_KEY: MISSING/EMPTY"
+        env:
+          PLANTNET_API_KEY: ${{ secrets.PLANTNET_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         
       - name: Test secrets and simple replacement
         run: |
-          echo "=== CHECKING SECRETS ==="
-          if [ -n "$PLANTNET_API_KEY" ]; then
-            echo "✅ PLANTNET_API_KEY exists (length: ${#PLANTNET_API_KEY})"
+          echo "=== DETAILED SECRET CHECK ==="
+          echo "PLANTNET_API_KEY length: ${#PLANTNET_API_KEY}"
+          echo "GEMINI_API_KEY length: ${#GEMINI_API_KEY}"
+          
+          if [ -z "$PLANTNET_API_KEY" ]; then
+            echo "❌ PLANTNET_API_KEY is EMPTY!"
           else
-            echo "❌ PLANTNET_API_KEY is missing!"
+            echo "✅ PLANTNET_API_KEY has content: ${PLANTNET_API_KEY:0:10}..."
           fi
           
-          if [ -n "$GEMINI_API_KEY" ]; then
-            echo "✅ GEMINI_API_KEY exists (length: ${#GEMINI_API_KEY})"
+          if [ -z "$GEMINI_API_KEY" ]; then
+            echo "❌ GEMINI_API_KEY is EMPTY!"
           else
-            echo "❌ GEMINI_API_KEY is missing!"
+            echo "✅ GEMINI_API_KEY has content: ${GEMINI_API_KEY:0:10}..."
           fi
           
           echo ""
-          echo "=== BEFORE REPLACEMENT ==="
-          grep -n "PLANTNET_KEY_HERE\|GEMINI_KEY_HERE" index.html || echo "No simple placeholders found"
-          grep -n "API_KEY" index.html | head -5
+          echo "=== SHOWING EXACT HTML CONTENT ==="
+          echo "Lines with PLANTNET_KEY_HERE:"
+          grep -n "PLANTNET_KEY_HERE" index.html || echo "PLANTNET_KEY_HERE not found!"
+          echo "Lines with GEMINI_KEY_HERE:"
+          grep -n "GEMINI_KEY_HERE" index.html || echo "GEMINI_KEY_HERE not found!"
           
           echo ""
-          echo "=== SIMPLE REPLACEMENT ==="
+          echo "=== MANUAL REPLACEMENT TEST ==="
+          # Test if the keys work at all
+          echo "Testing replacement manually:"
+          echo "PLANTNET_KEY_HERE" | sed "s/PLANTNET_KEY_HERE/$PLANTNET_API_KEY/"
+          echo "GEMINI_KEY_HERE" | sed "s/GEMINI_KEY_HERE/$GEMINI_API_KEY/"
+          
+          echo ""
+          echo "=== ATTEMPTING REPLACEMENT ==="
+          # Show before
+          echo "BEFORE:"
+          head -40 index.html | tail -10
+          
+          # Do replacement with verbose output
+          echo "Running sed commands..."
           sed -i "s/PLANTNET_KEY_HERE/$PLANTNET_API_KEY/g" index.html
-          sed -i "s/GEMINI_KEY_HERE/$GEMINI_API_KEY/g" index.html
+          echo "PlantNet sed completed"
+          sed -i "s/GEMINI_KEY_HERE/$GEMINI_API_KEY/g" index.html  
+          echo "Gemini sed completed"
           
-          echo "=== AFTER REPLACEMENT ==="
-          grep -n "const.*API_KEY" index.html | head -5
+          # Show after
+          echo "AFTER:"
+          head -40 index.html | tail -10
           
           echo ""
-          echo "=== CHECKING FOR UNREPLACED PLACEHOLDERS ==="
+          echo "=== FINAL CHECK ==="
           if grep -q "PLANTNET_KEY_HERE\|GEMINI_KEY_HERE" index.html; then
-            echo "❌ Still have unreplaced simple placeholders!"
+            echo "❌ Placeholders still present!"
             grep "PLANTNET_KEY_HERE\|GEMINI_KEY_HERE" index.html
           else
-            echo "✅ Simple placeholders replaced successfully!"
+            echo "✅ All placeholders replaced!"
           fi
           
         env:
